@@ -1581,6 +1581,11 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
 
     var linkHighlightRange: [Terminal.LinkMatch.RowRange]?
 
+    /// The per-row style overlay's provider and its generation
+    /// (`setRowDecorationProvider`, `invalidateRowDecorations`).
+    var rowDecorationProvider: (any TerminalRowDecorationProvider)?
+    var rowDecorationGeneration: UInt64 = 0
+
     /**
      * If set to true, this will call the TerminalViewDelegate's rangeChanged method
      * when there are changes that are being performed on the UI

@@ -372,7 +372,11 @@ final class SnapshotTextBuilder {
         var decodedAttribute = CharData.defaultAttr
         var baseAttributesStyleKey: PackedAttributeKey?
         var baseAttributesHasUrl = false
+        var baseAttributesDecoration: Int?
         var baseAttributes: SnapshotTextAttributes?
+        // The row's style overlay (`TerminalRowDecoration`): usually empty.
+        let decorations = snapshotRow.decorations
+        var lastDecoration: Int?
 
         func flushPending() {
             if !pendingText.isEmpty, let attrs = pendingAttrs {
@@ -407,14 +411,23 @@ final class SnapshotTextBuilder {
             }
             let hasUrl = shouldUnderlineLink(row: absoluteRow, column: col, width: width,
                                              cell: ch, context: context)
+            let decoration = decorations.isEmpty ? nil
+                : decorationIndex(decorations, column: col, width: width)
             let attributes: SnapshotTextAttributes?
-            if baseAttributesStyleKey == styleKey && baseAttributesHasUrl == hasUrl {
+            if baseAttributesStyleKey == styleKey && baseAttributesHasUrl == hasUrl
+                && baseAttributesDecoration == decoration {
                 attributes = baseAttributes
             } else {
-                attributes = getAttributes(styleKey, attribute: attr, withUrl: hasUrl,
-                                           context: context)
+                if let decoration {
+                    attributes = getAttributes(decorations[decoration].apply(to: attr),
+                                               withUrl: hasUrl, context: context)
+                } else {
+                    attributes = getAttributes(styleKey, attribute: attr, withUrl: hasUrl,
+                                               context: context)
+                }
                 baseAttributesStyleKey = styleKey
                 baseAttributesHasUrl = hasUrl
+                baseAttributesDecoration = decoration
                 baseAttributes = attributes
             }
             guard let attributes else {
@@ -477,6 +490,7 @@ final class SnapshotTextBuilder {
             // rebuilt at these boundaries, so unchanged cells append without
             // copying it.
             if styleKey != lastStyleKey || hasUrl != lastHasUrl || isSelected != lastIsSelected
+                || decoration != lastDecoration
                 || blinkHidden != lastBlinkHidden
                 || usesShapeColor != lastUsesShapeColor
                 || glyphFallback?.font !== lastGlyphFallbackFont
@@ -486,6 +500,7 @@ final class SnapshotTextBuilder {
                 lastStyleKey = styleKey
                 lastHasUrl = hasUrl
                 lastIsSelected = isSelected
+                lastDecoration = decoration
                 lastBlinkHidden = blinkHidden
                 lastUsesShapeColor = usesShapeColor
                 lastGlyphFallbackFont = glyphFallback?.font
@@ -667,6 +682,14 @@ final class SnapshotTextBuilder {
             }
             return highlight.range.overlaps(column..<(column + width))
         }
+    }
+
+    /// The first decoration covering any column of the cell at `column`.
+    func decorationIndex(_ decorations: [TerminalRowDecoration], column: Int,
+                         width: Int) -> Int?
+    {
+        let end = column + width
+        return decorations.firstIndex { $0.columns.lowerBound < end && column < $0.columns.upperBound }
     }
 
     func isColumnSelected(_ selectionRange: Range<Int>?, column: Int, width: Int) -> Bool {

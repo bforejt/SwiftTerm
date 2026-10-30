@@ -151,6 +151,8 @@ final class TerminalSnapshot {
         var resolvedCharacters: [Int: Character]
         var resolvedText: [Int: String]
         var images: [SnapshotImage]
+        /// The provider's overlay for this row (`TerminalRowDecoration`).
+        var decorations: [TerminalRowDecoration]
         var revision: UInt64
 
         init (source: BufferLine, borrowing: Bool = false,
@@ -168,6 +170,7 @@ final class TerminalSnapshot {
             resolvedCharacters = [:]
             resolvedText = [:]
             images = []
+            decorations = []
             revision = 0
         }
 
@@ -285,6 +288,11 @@ final class TerminalSnapshot {
     private var previousAnsiColors: [Color] = []
     private var previousBidiHostPolicy: BidiHostPolicy?
     private var previousBidiFont: ObjectIdentifier?
+    private var previousDecorationProvider: ObjectIdentifier?
+    private var previousDecorationGeneration: UInt64 = 0
+    /// Scratch for the rows the decoration provider is asked about this frame.
+    private var decorationRequests: [TerminalRowDecorationRequest] = []
+    private var decorationRowIndexes: [Int] = []
 
     var firstRow = 0
     var yDisp = 0
@@ -393,6 +401,13 @@ final class TerminalSnapshot {
         style = newStyle
         ansiColors = terminal.ansiColors
 
+        let decorationProvider = viewState.rowDecorationProvider
+        let decorationProviderID = decorationProvider.map { ObjectIdentifier($0) }
+        let decorationsInvalidated = decorationProviderID != previousDecorationProvider ||
+            viewState.rowDecorationGeneration != previousDecorationGeneration
+        decorationRequests.removeAll(keepingCapacity: true)
+        decorationRowIndexes.removeAll(keepingCapacity: true)
+
         let visibleCount = max(0, min(buffer.rows, buffer.lines.count - firstRow))
         while rows.count > visibleCount {
             rowPool.append(rows.removeLast())
@@ -482,7 +497,18 @@ final class TerminalSnapshot {
             if contentChanged || bidiChanged || styleChanged || imagesChanged {
                 destination.revision &+= 1
             }
+            if decorationProvider != nil {
+                if contentChanged || decorationsInvalidated {
+                    decorationRequests.append(
+                        destination.decorationRequest(row: absoluteRow, cols: cols))
+                    decorationRowIndexes.append(index)
+                }
+            } else if !destination.decorations.isEmpty {
+                destination.decorations = []
+                destination.revision &+= 1
+            }
         }
+        applyRowDecorations(provider: decorationProvider)
 
         kitty = SnapshotKitty(renderSnapshot: terminal.kittyGraphicsRenderSnapshot())
 
@@ -550,7 +576,27 @@ final class TerminalSnapshot {
         previousAnsiColors = terminal.ansiColors
         previousBidiHostPolicy = viewState.bidiHostPolicy
         previousBidiFont = bidiFont
+        previousDecorationProvider = decorationProviderID
+        previousDecorationGeneration = viewState.rowDecorationGeneration
         return .refreshed
+    }
+
+    /// Asks the provider, once for the whole frame, about the rows collected
+    /// by `refresh`, and bumps the revision of each row whose overlay changed
+    /// so both renderers rebuild it.
+    private func applyRowDecorations (provider: (any TerminalRowDecorationProvider)?) {
+        guard let provider, !decorationRequests.isEmpty else { return }
+        let results = provider.rowDecorations(for: decorationRequests)
+        for (offset, index) in decorationRowIndexes.enumerated() where index < rows.count {
+            let destination = rows[index]
+            let decorations = offset < results.count ? results[offset] : []
+            if decorations != destination.decorations {
+                destination.decorations = decorations
+                destination.revision &+= 1
+            }
+        }
+        decorationRequests.removeAll(keepingCapacity: true)
+        decorationRowIndexes.removeAll(keepingCapacity: true)
     }
 }
 #endif

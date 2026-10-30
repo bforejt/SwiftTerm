@@ -537,6 +537,8 @@ struct FrameViewState: Sendable {
     let commandActive: Bool
     let textBlinkVisible: Bool
     let notifyUpdateChanges: Bool
+    let rowDecorationProvider: (any TerminalRowDecorationProvider)?
+    let rowDecorationGeneration: UInt64
 
     // What SnapshotRenderContext reads, plus the geometry the frame tick uses
     // to compute its dirty region.
@@ -573,6 +575,8 @@ struct FrameViewState: Sendable {
         commandActive = view.commandActive
         textBlinkVisible = view.textBlinkVisible
         notifyUpdateChanges = view.notifyUpdateChanges
+        rowDecorationProvider = view.rowDecorationProvider
+        rowDecorationGeneration = view.rowDecorationGeneration
 
         fonts = view.frameCaptureCache.fonts(for: view)
         cellDimension = view.cellDimension

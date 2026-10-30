@@ -248,6 +248,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
     private var uiShutdownState = UIShutdownState.active
     var linkHighlightRange: [Terminal.LinkMatch.RowRange]?
+
+    /// The per-row style overlay's provider and its generation
+    /// (`setRowDecorationProvider`, `invalidateRowDecorations`).
+    var rowDecorationProvider: (any TerminalRowDecorationProvider)?
+    var rowDecorationGeneration: UInt64 = 0
     private var lastPointerLocation: CGPoint?
     
     /**

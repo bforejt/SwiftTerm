@@ -781,6 +781,23 @@ final class TerminalRenderOwner: Sendable {
         }
     }
 
+    /// Refreshes the snapshot with `viewState` and returns each visible row's
+    /// decorations (`TerminalView.visibleRowDecorations()`).
+    @MainActor
+    func visibleRowDecorations (viewState: FrameViewState) -> [[TerminalRowDecoration]] {
+        withRenderState { _ in
+            guard let session = currentSession() else { return [] }
+            let terminal = session.terminal
+            _ = terminal.terminalLock.withLock {
+                session.snapshot.refresh(
+                    terminal: terminal,
+                    viewState: viewState,
+                    selection: SnapshotSelectionState(selection: session.selection))
+            }
+            return session.snapshot.rows.map(\.decorations)
+        }
+    }
+
     func inspection () -> TerminalRenderSnapshotInspection {
         withRenderState { _ in
             guard let snapshot = currentSession()?.snapshot else {
