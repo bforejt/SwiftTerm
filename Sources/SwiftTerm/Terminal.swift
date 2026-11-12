@@ -8999,6 +8999,9 @@ open class Terminal {
         var result = Data()
         
         let b = bufferFromKind(kind: kind)
+        // Reserve the expected size once (one byte per column plus the newline per line, the ASCII case); a Data grown
+        // from empty by repeated appends can keep its peak size in the process footprint after it is freed.
+        result.reserveCapacity(b.lines.count * (cols + 1))
         let newLine = Data([10])
         for row in 0..<b.lines.count {
             let str = translateBufferLineToString (buffer: b, line: row, start: 0, end: -1)
