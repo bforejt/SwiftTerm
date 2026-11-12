@@ -1743,7 +1743,9 @@ open class Terminal {
     
     func cmdSet8BitControls ()
     {
-        cc.send8bit = true
+        // FalconTerm fork: S8C1T is ignored and replies stay 7-bit. 8-bit C1 replies are not valid UTF-8 and do not
+        // survive a single-byte session encoding, so honouring the request would only corrupt the replies.
+        cc.send8bit = false
     }
 
     func cmdSet7BitControls ()
@@ -5744,14 +5746,8 @@ open class Terminal {
             }
         }
         if pars.count > 1 && conformance != .vt100 {
-            switch pars [1] {
-            case 0:
-                cc.send8bit = true
-            case 2:
-                cc.send8bit = true
-            default:
-                cc.send8bit = false
-            }
+            // FalconTerm fork: DECSCL's 8-bit option is ignored like S8C1T; replies stay 7-bit.
+            cc.send8bit = false
         }
     }
     
