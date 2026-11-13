@@ -22,7 +22,9 @@ program in the terminal drives.
 ``TerminalOptions/kittyClipboardPolicy`` now defaults to an empty set. It
 previously defaulted to `.all`. A host that relied on the old default must set
 the policy and the host capabilities explicitly. Without them, mode 5522
-reports as unsupported and every OSC 5522 request answers `ENOSYS`.
+reports as unsupported. With an empty policy, this fork (FalconTerm) drops
+every OSC 5522 request without a reply; with a policy set but no matching
+host capability, a request answers `ENOSYS`.
 
 These API changes accompany it:
 

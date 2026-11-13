@@ -1083,6 +1083,12 @@ final class KittyClipboardProtocol: @unchecked Sendable {
     // MARK: Packet dispatch
 
     func handle(_ data: ArraySlice<UInt8>) {
+        // FalconTerm fork: with an empty terminal policy the protocol is off
+        // and every request is dropped without a reply. Upstream answers
+        // `ENOSYS` or `EINVAL` there and echoes the request's `id`, up to 512
+        // bytes the host chose, back to the host as input. With any policy
+        // set, upstream behaviour is unchanged.
+        guard let terminal, !terminal.options.kittyClipboardPolicy.isEmpty else { return }
         let metadataBytes: ArraySlice<UInt8>
         let payload: ArraySlice<UInt8>
         let hasPayload: Bool

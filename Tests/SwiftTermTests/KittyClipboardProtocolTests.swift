@@ -502,6 +502,80 @@ struct KittyClipboardProtocolTests {
         #expect(!withTerminal(terminal) { $0.kittyPasteEventPossible(location: .standard) })
     }
 
+    // FalconTerm fork: an empty policy turns the protocol off, so no request
+    // is answered and no host-chosen `id` is echoed back as input.
+    @Test func anEmptyPolicyAnswersNoRequestOfAnyType() {
+        let marker = "PWNED-id_1.2+3"
+        let requests = [
+            osc("type=write:id=\(marker)"),
+            osc("type=write:loc=primary:id=\(marker)"),
+            osc("type=write:id=\(marker);"),
+            osc("type=write:id=\(marker):mime=\(b64("text/plain"))"),
+            osc("type=write:loc=bogus:id=\(marker)"),
+            osc("type=write:norecord:id=\(marker)"),
+            osc("type=wdata:id=\(marker):mime=\(b64("text/plain"));\(b64("x"))"),
+            osc("type=wdata:id=\(marker)"),
+            osc("type=walias:id=\(marker):mime=\(b64("text/html"));\(b64("text/plain"))"),
+            osc("type=wdata:loc=bogus:id=\(marker)"),
+            osc("type=read:id=\(marker);\(b64("."))"),
+            osc("type=read:id=\(marker);\(b64("text/plain"))"),
+            osc("type=read:loc=primary:id=\(marker);\(b64("."))"),
+            osc("type=read:id=\(marker):name=\(b64("app")):pw=\(b64("pw"));\(b64("text/plain"))"),
+            osc("type=read:loc=bogus:id=\(marker);\(b64("."))"),
+            osc("type=read:id=\(marker)"),
+        ]
+        for capabilities: KittyClipboardCapabilities in [[], .standard, .all] {
+            let delegate = ScriptedKittyClipboardDelegate()
+            delegate.state.withLock {
+                $0.capabilities = capabilities
+                $0.available = ["text/plain"]
+                $0.reads = ["text/plain": .data(Data("secret".utf8))]
+                $0.permission = .allow(rememberPassword: false)
+            }
+            let terminal = Terminal(
+                delegate: delegate, options: TerminalOptions(kittyClipboardPolicy: []))
+            for request in requests {
+                feed(terminal, request)
+            }
+            // A full write transaction and a mode query close the stream; the
+            // query's answer is the only output.
+            feed(terminal, osc("type=write:id=\(marker)"))
+            feed(terminal, osc("type=wdata:mime=\(b64("text/plain"));\(b64("x"))"))
+            feed(terminal, osc("type=wdata"))
+            feed(terminal, "\(esc)[?5522$p")
+            #expect(delegate.waitForSends(1))
+            Thread.sleep(forTimeInterval: 0.03)
+            #expect(output(delegate) == "\(esc)[?5522;0$y")
+            #expect(!output(delegate).contains(marker))
+            #expect(delegate.state.withLock { $0.permissionCount } == 0)
+            #expect(delegate.state.withLock { $0.writes.isEmpty })
+        }
+    }
+
+    // FalconTerm fork: any policy keeps upstream's answers, `id` included.
+    @Test func aPartialPolicyStillAnswersWithTheRequestID() {
+        let delegate = ScriptedKittyClipboardDelegate()
+        delegate.state.withLock { $0.capabilities = .all }
+        let terminal = Terminal(
+            delegate: delegate, options: TerminalOptions(kittyClipboardPolicy: .read))
+        feed(terminal, osc("type=write:id=w1"))
+        #expect(delegate.waitForSends(1))
+        #expect(oscPackets(delegate.output()) == ["type=write:status=ENOSYS:id=w1"])
+
+        delegate.clearSent()
+        feed(terminal, osc("type=write:id=w2;"))
+        #expect(delegate.waitForSends(1))
+        #expect(oscPackets(delegate.output()) == ["type=write:status=EINVAL:id=w2"])
+
+        let readDelegate = ScriptedKittyClipboardDelegate()
+        readDelegate.state.withLock { $0.capabilities = .all }
+        let readTerminal = Terminal(
+            delegate: readDelegate, options: TerminalOptions(kittyClipboardPolicy: .write))
+        feed(readTerminal, osc("type=read:id=r1;\(b64("."))"))
+        #expect(readDelegate.waitForSends(1))
+        #expect(oscPackets(readDelegate.output()) == ["type=read:status=ENOSYS:id=r1"])
+    }
+
     // MARK: - 16.3 Token and permissions
 
     @Test func aPasteTokenAuthorizesExactlyOneReadWithoutAPrompt() {
